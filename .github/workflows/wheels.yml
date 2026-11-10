@@ -1,12 +1,16 @@
 name: Wheels
 
 # Builds self-contained wheels (native dependencies bundled by auditwheel /
-# delocate) for CPython 3.12-3.14 on Linux and macOS, tests each one in a clean
-# environment, and publishes to PyPI when a GitHub release is published.
+# delocate) for CPython 3.12-3.14 on Linux and macOS and tests each one in a
+# clean environment. When a GitHub release is published, attaches them to the
+# release and regenerates the pip index on GitHub Pages
+# (https://<owner>.github.io/<repo>/simple/), so that
+#   pip install dreal --extra-index-url https://<owner>.github.io/<repo>/simple/
+# works.
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, release ]
   pull_request:
     branches: [ master ]
   release:
@@ -57,17 +61,48 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
-  publish:
-    name: publish to PyPI
-    if: github.event_name == 'release' && github.event.action == 'published'
+  github_release:
+    name: attach to GitHub release
+    if: github.event_name == 'release'
     needs: [ build_wheels, build_sdist ]
     runs-on: ubuntu-24.04
-    environment: pypi
     permissions:
-      id-token: write  # PyPI trusted publishing.
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          gh release upload "${{ github.event.release.tag_name }}" dist/* \
+            --repo "${{ github.repository }}" --clobber
+
+  pip_index:
+    name: deploy pip index to GitHub Pages
+    # Also runnable on its own (workflow_dispatch) to rebuild the index.
+    if: always() && (needs.github_release.result == 'success' || github.event_name == 'workflow_dispatch')
+    needs: [ github_release ]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}simple/
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: generate index
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/wheels/make_index.py "${{ github.repository }}" site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
