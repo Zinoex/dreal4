@@ -97,10 +97,14 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
+      - id: pages
+        uses: actions/configure-pages@v5
       - name: generate index
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python3 scripts/wheels/make_index.py "${{ github.repository }}" site
+        run: >-
+          python3 scripts/wheels/make_index.py "${{ github.repository }}" site
+          "${{ steps.pages.outputs.base_url }}"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

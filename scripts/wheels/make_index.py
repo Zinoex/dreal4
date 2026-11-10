@@ -20,7 +20,7 @@ The output directory is meant to be deployed to GitHub Pages, so that
 
 picks the right wheel for the platform automatically.
 
-Usage: make_index.py <owner/repo> <output-dir>
+Usage: make_index.py <owner/repo> <output-dir> [<pages-base-url>]
 Uses $GITHUB_TOKEN (optional, avoids API rate limits).
 """
 import html
@@ -91,7 +91,9 @@ def main():
             '<a href="{0}/">{0}</a>'.format(PROJECT)]))
 
     owner, name = repo.split('/')
-    index_url = 'https://{}.github.io/{}/simple/'.format(owner.lower(), name)
+    base_url = sys.argv[3] if len(sys.argv) > 3 else \
+        'https://{}.github.io/{}'.format(owner.lower(), name)
+    index_url = base_url.rstrip('/') + '/simple/'
     with open(os.path.join(out, 'index.html'), 'w') as f:
         f.write(_page('dReal wheels', [
             'pip install dreal --extra-index-url {}'.format(
